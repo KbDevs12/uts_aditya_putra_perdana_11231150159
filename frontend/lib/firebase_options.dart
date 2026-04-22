@@ -83,4 +83,5 @@ class DefaultFirebaseOptions {
     authDomain: 'parfum-store-986b9.firebaseapp.com',
     storageBucket: 'parfum-store-986b9.firebasestorage.app',
   );
+
 }
