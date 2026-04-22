@@ -41,6 +41,7 @@ func main() {
 
 	// Public routes
 	r.POST("/auth/login", h.Login)
+	r.POST("/auth/register", h.Register)
 
 	// Protected routes
 	api := r.Group("/api", middleware.JWTAuth())

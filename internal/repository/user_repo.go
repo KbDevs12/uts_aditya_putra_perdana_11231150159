@@ -23,6 +23,10 @@ func (r *UserRepo) FindByUID(uid string) (*domain.User, error) {
 	return &user, nil
 }
 
+func (r *UserRepo) UpdateEmail(id int64, email string) error {
+	return r.db.Model(&domain.User{}).Where("id = ?", id).Update("email", email).Error
+}
+
 func (r *UserRepo) Create(user *domain.User) error {
 	return r.db.Create(user).Error
 }
