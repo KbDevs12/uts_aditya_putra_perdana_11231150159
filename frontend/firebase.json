@@ -1,0 +1,25 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "parfum-store-986b9",
+          "appId": "1:307016094412:android:2b1ede0b840a6535c3a869",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "parfum-store-986b9",
+          "configurations": {
+            "android": "1:307016094412:android:2b1ede0b840a6535c3a869",
+            "ios": "1:307016094412:ios:42d6899b40c8cb18c3a869",
+            "macos": "1:307016094412:ios:42d6899b40c8cb18c3a869",
+            "web": "1:307016094412:web:0102bbe62cc4af3dc3a869",
+            "windows": "1:307016094412:web:69375b39e44c7eaac3a869"
+          }
+        }
+      }
+    }
+  }
+}
