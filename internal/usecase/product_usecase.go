@@ -9,6 +9,10 @@ type ProductUsecase struct {
 	repo *repository.ProductRepo
 }
 
+func NewProductUsecase(repo *repository.ProductRepo) *ProductUsecase {
+	return &ProductUsecase{repo}
+}
+
 func (u *ProductUsecase) GetAll() ([]domain.Product, error) {
 	return u.repo.FindAll()
 }
