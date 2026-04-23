@@ -28,11 +28,6 @@ func (u *AuthUsecase) Register(idToken, name string) error {
 		return errors.New("invalid firebase token")
 	}
 
-	emailVerified, ok := token.Claims["email_verified"].(bool)
-	if !ok || !emailVerified {
-		return errors.New("email not verified")
-	}
-
 	email, _ := token.Claims["email"].(string)
 
 	existing, _ := u.userRepo.FindByUID(token.UID)

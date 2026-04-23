@@ -1,5 +1,6 @@
 class AppConstant {
-  static const String baseUrl = "nanti disini";
+  static const String baseUrl =
+      "https://hunter-womanless-freeware.ngrok-free.dev"; // didapat dari ngrok
 
   static const String register = '/auth/register';
   static const String login = '/auth/login';
