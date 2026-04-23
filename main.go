@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -11,6 +13,8 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/usecase"
+
+	"golang.ngrok.com/ngrok/v2"
 )
 
 func main() {
@@ -62,7 +66,15 @@ func main() {
 		api.GET("/orders/:id", h.GetOrderDetail)
 	}
 
-	if err := r.Run(":8080"); err != nil {
-		log.Fatal("Failed to run server:", err)
+	ctx := context.Background()
+	tunnel, err := ngrok.Listen(ctx)
+	if err != nil {
+		log.Fatal("failed to start ngrok", err)
+	}
+
+	log.Println("public url: ", tunnel.URL())
+
+	if err := http.Serve(tunnel, r); err != nil {
+		log.Fatal("Server error:", err)
 	}
 }
