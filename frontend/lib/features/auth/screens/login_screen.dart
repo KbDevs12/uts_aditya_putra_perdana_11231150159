@@ -34,7 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
 
-    if (!success) {
+    if (success) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(auth.errorMessage ?? 'Login failed'),
