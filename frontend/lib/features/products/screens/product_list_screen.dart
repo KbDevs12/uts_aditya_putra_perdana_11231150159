@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'package:frontend/features/auth/screens/login_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/utils/currency_formatter.dart';
@@ -94,6 +95,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
               if (confirm == true && mounted) {
                 context.read<CartProvider>().reset();
                 await context.read<AuthProvider>().logout();
+
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => LoginScreen()),
+                    (route) => false,
+                  );
+                }
               }
             },
           ),
