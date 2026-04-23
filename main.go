@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -66,15 +68,20 @@ func main() {
 		api.GET("/orders/:id", h.GetOrderDetail)
 	}
 
-	ctx := context.Background()
-	tunnel, err := ngrok.Listen(ctx)
+	token := os.Getenv("NGROK_AUTHTOKEN")
+	if token == "" {
+		log.Fatal("❌ NGROK_AUTHTOKEN tidak ditemukan di .env!")
+	}
+	log.Println("✅ NGROK_AUTHTOKEN ditemukan:", token[:8]+"...")
+
+	l, err := ngrok.Listen(context.Background())
 	if err != nil {
-		log.Fatal("failed to start ngrok", err)
+		log.Fatal(err)
 	}
 
-	log.Println("public url: ", tunnel.URL())
+	fmt.Println("🌐 Public URL:", l.URL())
 
-	if err := http.Serve(tunnel, r); err != nil {
-		log.Fatal("Server error:", err)
+	if err := http.Serve(l, r); err != nil {
+		log.Fatal(err)
 	}
 }
