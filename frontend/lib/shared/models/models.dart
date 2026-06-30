@@ -84,19 +84,28 @@ class OrderModel {
   final int userId;
   final double totalPrice;
   final String status;
+  final String paymentStatus;
+  final String paymentMethod;
+  final String? paymentIntentToken;
 
   OrderModel({
     required this.id,
     required this.userId,
     required this.totalPrice,
     required this.status,
+    required this.paymentStatus,
+    required this.paymentMethod,
+    this.paymentIntentToken,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) => OrderModel(
     id: json['id'],
     userId: json['user_id'],
     totalPrice: (json['total_price'] as num).toDouble(),
-    status: json['status'] ?? 'pending',
+    status: json['status'] ?? 'pending_payment',
+    paymentStatus: json['payment_status'] ?? 'unpaid',
+    paymentMethod: json['payment_method'] ?? 'global_wallet',
+    paymentIntentToken: json['payment_intent_token'],
   );
 }
 
@@ -137,4 +146,44 @@ class OrderItemModel {
         productName: productName ?? this.productName,
         productBrand: productBrand ?? this.productBrand,
       );
+}
+
+class PaymentIntentModel {
+  final String token;
+  final double amount;
+  final String merchant;
+  final String status;
+  final String deepLink;
+  final String? expiresAt;
+
+  PaymentIntentModel({
+    required this.token,
+    required this.amount,
+    required this.merchant,
+    required this.status,
+    required this.deepLink,
+    this.expiresAt,
+  });
+
+  factory PaymentIntentModel.fromJson(Map<String, dynamic> json) =>
+      PaymentIntentModel(
+        token: json['token'],
+        amount: (json['amount'] as num).toDouble(),
+        merchant: json['merchant'] ?? json['merchant_name'] ?? 'E-Commerce',
+        status: json['status'] ?? 'pending',
+        deepLink: json['deep_link'] ?? '',
+        expiresAt: json['expires_at']?.toString(),
+      );
+}
+
+class CheckoutResult {
+  final OrderModel order;
+  final PaymentIntentModel paymentIntent;
+
+  CheckoutResult({required this.order, required this.paymentIntent});
+
+  factory CheckoutResult.fromJson(Map<String, dynamic> json) => CheckoutResult(
+    order: OrderModel.fromJson(json['order']),
+    paymentIntent: PaymentIntentModel.fromJson(json['payment_intent']),
+  );
 }
