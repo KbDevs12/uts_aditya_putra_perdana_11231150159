@@ -19,20 +19,40 @@ class OrderProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<bool> checkout() async {
+  Future<CheckoutResult?> checkout() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await _api.dio.post(AppConstant.checkout);
+      final response = await _api.dio.post(AppConstant.checkout);
+      final result = CheckoutResult.fromJson(response.data);
       await fetchOrders();
-      return true;
+      return result;
     } on DioException catch (e) {
       _errorMessage = e.response?.data['error'] ?? 'Checkout failed';
       _isLoading = false;
       notifyListeners();
-      return false;
+      return null;
+    }
+  }
+
+  Future<PaymentIntentModel?> createPaymentIntent(int orderId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _api.dio.post(
+        AppConstant.paymentIntentForOrder(orderId),
+      );
+      return PaymentIntentModel.fromJson(response.data);
+    } on DioException catch (e) {
+      _errorMessage = e.response?.data['error'] ?? 'Failed to create payment';
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -68,7 +88,6 @@ class OrderProvider extends ChangeNotifier {
           .map((e) => OrderItemModel.fromJson(e))
           .toList();
 
-      // Enrich dengan nama produk
       _selectedOrderItems = await _enrichWithProductData(rawItems);
     } on DioException catch (e) {
       _errorMessage = e.response?.data['error'] ?? 'Failed to load order';
