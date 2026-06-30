@@ -9,6 +9,7 @@ type Handler struct {
 	productUC *usecase.ProductUsecase
 	cartUC    *usecase.CartUsecase
 	orderUC   *usecase.OrderUsecase
+	walletUC  *usecase.WalletUsecase
 }
 
 func NewHandler(
@@ -16,6 +17,7 @@ func NewHandler(
 	productUC *usecase.ProductUsecase,
 	cartUC *usecase.CartUsecase,
 	orderUC *usecase.OrderUsecase,
+	walletUC *usecase.WalletUsecase,
 ) *Handler {
-	return &Handler{authUC, productUC, cartUC, orderUC}
+	return &Handler{authUC, productUC, cartUC, orderUC, walletUC}
 }
