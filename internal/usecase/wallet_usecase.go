@@ -209,7 +209,7 @@ func generateToken(byteLen int) (string, error) {
 func buildWalletDeepLink(token string, amount float64, merchantName string) string {
 	scheme := os.Getenv("WALLET_DEEPLINK_SCHEME")
 	if scheme == "" {
-		scheme = "globalwallet"
+		scheme = "kantongin"
 	}
 	q := url.Values{}
 	q.Set("token", token)
