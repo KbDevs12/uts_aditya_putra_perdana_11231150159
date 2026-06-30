@@ -1,11 +1,12 @@
 module backend
 
-go 1.26.1
+go 1.25.7
 
 require (
 	firebase.google.com/go v3.13.0+incompatible
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	golang.ngrok.com/ngrok/v2 v2.1.4
 	google.golang.org/api v0.276.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
@@ -15,7 +16,6 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.ngrok.com/muxado/v2 v2.0.1 // indirect
-	golang.ngrok.com/ngrok/v2 v2.1.3 // indirect
 )
 
 require (
