@@ -8,4 +8,7 @@ class AppConstant {
   static const String cart = '/api/cart';
   static const String checkout = '/api/orders/checkout';
   static const String orders = '/api/orders';
+
+  static String paymentIntentForOrder(int orderId) =>
+      '/api/orders/$orderId/payment-intent';
 }
