@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/order_provider.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/payment/deep_link_launcher.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final int orderId;
@@ -22,17 +23,48 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Color _statusColor(String status) {
     switch (status) {
+      case 'paid':
+      case 'completed':
+        return Colors.green;
       case 'pending':
+      case 'pending_payment':
         return Colors.orange;
       case 'processing':
         return Colors.blue;
-      case 'completed':
-        return Colors.green;
       case 'cancelled':
         return Colors.red;
       default:
         return Colors.grey;
     }
+  }
+
+  Future<void> _payAgain() async {
+    final provider = context.read<OrderProvider>();
+    final intent = await provider.createPaymentIntent(widget.orderId);
+    if (!mounted) return;
+
+    if (intent == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Gagal membuat pembayaran'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final opened = await DeepLinkLauncher.openWallet(intent.deepLink);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          opened
+              ? 'Kantongin dibuka untuk pembayaran.'
+              : 'Aplikasi Kantongin belum terpasang.',
+        ),
+        backgroundColor: opened ? Colors.green : Colors.orange,
+      ),
+    );
   }
 
   @override
@@ -52,6 +84,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     final order = provider.selectedOrder!;
     final items = provider.selectedOrderItems;
+    final canPay = order.paymentStatus != 'paid';
 
     return Scaffold(
       appBar: AppBar(
@@ -67,39 +100,39 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Status card
           _card(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                const Text(
-                  'Status',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _statusColor(order.status).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    order.status.toUpperCase(),
-                    style: TextStyle(
-                      color: _statusColor(order.status),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Status Order',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                  ),
+                    _badge(order.status),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Status Pembayaran',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    _badge(order.paymentStatus),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [const Text('Metode'), Text(order.paymentMethod)],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
-
-          // Items card
           _card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,10 +208,41 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ],
             ),
           ),
+          if (canPay) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: provider.isLoading ? null : _payAgain,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text('Bayar dengan Kantongin'),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+
+  Widget _badge(String status) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: _statusColor(status).withOpacity(0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      status.toUpperCase(),
+      style: TextStyle(
+        color: _statusColor(status),
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    ),
+  );
 
   Widget _card({required Widget child}) => Container(
     width: double.infinity,
