@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,8 +13,6 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/usecase"
-
-	"golang.ngrok.com/ngrok/v2"
 )
 
 func main() {
@@ -34,20 +30,25 @@ func main() {
 	cartItemRepo := repository.NewCartItemRepo(db)
 	orderRepo := repository.NewOrderRepo(db)
 	orderItemRepo := repository.NewOrderItemRepo(db)
+	walletRepo := repository.NewWalletRepo(db)
 
+	// Usecases
 	authUC := usecase.NewAuthUsecase(userRepo)
 	productUC := usecase.NewProductUsecase(productRepo)
 	cartUC := usecase.NewCartUsecase(cartRepo, cartItemRepo)
 	orderUC := usecase.NewOrderUsecase(orderRepo, orderItemRepo, cartRepo, cartItemRepo)
+	walletUC := usecase.NewWalletUsecase(walletRepo, orderRepo)
 
 	// Handler
-	h := deliveryHttp.NewHandler(authUC, productUC, cartUC, orderUC)
+	h := deliveryHttp.NewHandler(authUC, productUC, cartUC, orderUC, walletUC)
 
 	r := gin.Default()
+	r.Use(corsMiddleware())
 
 	// Public routes
 	r.POST("/auth/login", h.Login)
 	r.POST("/auth/register", h.Register)
+	r.GET("/api/payment-intents/:token", h.GetPaymentIntent)
 
 	// Protected routes
 	api := r.Group("/api", middleware.JWTAuth())
@@ -66,22 +67,34 @@ func main() {
 		api.POST("/orders/checkout", h.Checkout)
 		api.GET("/orders", h.GetMyOrders)
 		api.GET("/orders/:id", h.GetOrderDetail)
+		api.POST("/orders/:id/payment-intent", h.CreateOrderPaymentIntent)
+
+		// E-wallet
+		api.GET("/wallet", h.GetWallet)
+		api.POST("/wallet/topup", h.TopUpWallet)
+		api.GET("/wallet/transactions", h.GetWalletTransactions)
+		api.POST("/payment-intents/:token/pay", h.PayPaymentIntent)
 	}
 
-	token := os.Getenv("NGROK_AUTHTOKEN")
-	if token == "" {
-		log.Fatal("❌ NGROK_AUTHTOKEN tidak ditemukan di .env!")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	log.Println("✅ NGROK_AUTHTOKEN ditemukan:", token[:8]+"...")
-
-	l, err := ngrok.Listen(context.Background())
-	if err != nil {
+	log.Printf("🚀 Backend running on http://localhost:%s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatal(err)
 	}
+}
 
-	fmt.Println("🌐 Public URL:", l.URL())
-
-	if err := http.Serve(l, r); err != nil {
-		log.Fatal(err)
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
 	}
 }
