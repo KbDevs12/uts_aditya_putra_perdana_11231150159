@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/cart_provider.dart';
 import '../../orders/providers/order_provider.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/payment/deep_link_launcher.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -26,11 +27,13 @@ class _CartScreenState extends State<CartScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Checkout'),
-        content: const Text('Place order with all items in your cart?'),
+        content: const Text(
+          'Order akan dibuat dan pembayaran dibuka lewat Kantongin.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Batal'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -38,7 +41,7 @@ class _CartScreenState extends State<CartScreen> {
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Confirm'),
+            child: const Text('Lanjut Bayar'),
           ),
         ],
       ),
@@ -46,15 +49,24 @@ class _CartScreenState extends State<CartScreen> {
 
     if (confirm != true || !mounted) return;
 
-    final success = await context.read<OrderProvider>().checkout();
+    final result = await context.read<OrderProvider>().checkout();
     if (!mounted) return;
 
-    if (success) {
-      context.read<CartProvider>().fetchCart();
+    if (result != null) {
+      await context.read<CartProvider>().fetchCart();
+      final opened = await DeepLinkLauncher.openWallet(
+        result.paymentIntent.deepLink,
+      );
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Order placed successfully!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Checkout berhasil. Kantongin dibuka untuk pembayaran.'
+                : 'Checkout berhasil, tapi aplikasi wallet belum terpasang.',
+          ),
+          backgroundColor: opened ? Colors.green : Colors.orange,
         ),
       );
       Navigator.pushNamed(context, '/orders');
@@ -141,7 +153,6 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         child: Row(
                           children: [
-                            // Product image
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: item.productImageUrl.isNotEmpty
@@ -176,7 +187,6 @@ class _CartScreenState extends State<CartScreen> {
                                     ),
                             ),
                             const SizedBox(width: 12),
-
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +221,6 @@ class _CartScreenState extends State<CartScreen> {
                                 ],
                               ),
                             ),
-
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -239,7 +248,6 @@ class _CartScreenState extends State<CartScreen> {
                     },
                   ),
                 ),
-
                 Container(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   decoration: BoxDecoration(
@@ -274,7 +282,7 @@ class _CartScreenState extends State<CartScreen> {
                       SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: ElevatedButton(
+                        child: ElevatedButton.icon(
                           onPressed: (orderLoading || cart.isLoading)
                               ? null
                               : _checkout,
@@ -285,7 +293,7 @@ class _CartScreenState extends State<CartScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: orderLoading
+                          icon: orderLoading
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
@@ -294,10 +302,13 @@ class _CartScreenState extends State<CartScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text(
-                                  'Checkout',
-                                  style: TextStyle(fontSize: 16),
-                                ),
+                              : const Icon(Icons.account_balance_wallet),
+                          label: Text(
+                            orderLoading
+                                ? 'Processing...'
+                                : 'Pay with Kantongin',
+                            style: const TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
                     ],
