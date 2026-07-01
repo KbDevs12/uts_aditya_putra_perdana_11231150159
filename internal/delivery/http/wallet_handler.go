@@ -48,14 +48,14 @@ func (h *Handler) TopUpWallet(c *gin.Context) {
 		return
 	}
 	if req.Description == "" {
-		req.Description = "Top Up dummy MVP"
+		req.Description = "Top up saldo Kantongin"
 	}
 	wallet, trx, err := h.walletUC.TopUp(userID, req.Amount, req.Description)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"wallet": wallet, "transaction": trx, "mode": "dummy_mvp"})
+	c.JSON(http.StatusOK, gin.H{"wallet": wallet, "transaction": trx})
 }
 
 func (h *Handler) GetWalletTransactions(c *gin.Context) {
@@ -123,7 +123,7 @@ func (h *Handler) PayPaymentIntent(c *gin.Context) {
 		status := http.StatusBadRequest
 		if err.Error() == "insufficient balance" {
 			status = http.StatusPaymentRequired
-		} else if err.Error() == "invalid pin" || err.Error() == "pin is not set" {
+		} else if err.Error() == "invalid pin" || err.Error() == "pin setup required" || err.Error() == "pin is required" {
 			status = http.StatusUnauthorized
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -134,4 +134,38 @@ func (h *Handler) PayPaymentIntent(c *gin.Context) {
 		"payment_intent": intent,
 		"transaction":    trx,
 	})
+}
+
+func (h *Handler) TransferWallet(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+	var req struct {
+		ReceiverEmail string  `json:"receiver_email" binding:"required"`
+		Amount        float64 `json:"amount" binding:"required,gt=0"`
+		PIN           string  `json:"pin" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "receiver email, amount, and pin are required"})
+		return
+	}
+	receiver, err := h.authUC.FindUserByEmail(req.ReceiverEmail)
+	if err != nil || receiver == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "receiver account not found"})
+		return
+	}
+	label := receiver.Email
+	if receiver.Name != "" {
+		label = receiver.Name
+	}
+	debit, credit, err := h.walletUC.Transfer(userID, receiver.ID, label, req.Amount, req.PIN)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err.Error() == "insufficient balance" {
+			status = http.StatusPaymentRequired
+		} else if err.Error() == "invalid pin" || err.Error() == "pin setup required" || err.Error() == "pin is required" {
+			status = http.StatusUnauthorized
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "transfer successful", "transaction": debit, "receiver_transaction": credit})
 }

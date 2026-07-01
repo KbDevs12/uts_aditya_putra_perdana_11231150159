@@ -51,17 +51,17 @@ func main() {
 	r.Use(corsMiddleware())
 
 	r.GET("/health", func(c *gin.Context) {
-		redisStatus := "disabled"
+		otpStorageStatus := "disabled"
 		if redisClient != nil {
 			if err := redisClient.Ping(context.Background()).Err(); err != nil {
-				redisStatus = "error"
+				otpStorageStatus = "error"
 			} else {
-				redisStatus = "ok"
+				otpStorageStatus = "ok"
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"redis":  redisStatus,
+			"status":      "ok",
+			"otp_storage": otpStorageStatus,
 		})
 	})
 
@@ -71,12 +71,6 @@ func main() {
 	r.POST("/auth/verify-email-otp", h.VerifyEmailOTP)
 	r.POST("/otp/send-email", h.SendEmailOTP)
 	r.GET("/api/payment-intents/:token", h.GetPaymentIntent)
-
-	// Aliases mengikuti dokumen e-money (/v1/...)
-	r.POST("/v1/auth/register", h.Register)
-	r.POST("/v1/auth/verify-token", h.Login)
-	r.POST("/v1/auth/verify-email-otp", h.VerifyEmailOTP)
-	r.POST("/v1/otp/send-email", h.SendEmailOTP)
 
 	// Protected routes
 	api := r.Group("/api", middleware.JWTAuth())
@@ -100,18 +94,16 @@ func main() {
 		// E-wallet
 		api.GET("/wallet", h.GetWallet)
 		api.POST("/wallet/topup", h.TopUpWallet)
+		api.POST("/wallet/transfer", h.TransferWallet)
 		api.GET("/wallet/transactions", h.GetWalletTransactions)
 		api.POST("/wallet/pin", h.SetWalletPIN)
 		api.POST("/wallet/pin/verify", h.VerifyWalletPIN)
 		api.POST("/payment-intents/:token/pay", h.PayPaymentIntent)
 
-		// MVP 2FA / FCM endpoints
+		// Account protection and notification endpoints
 		api.POST("/auth/setup-2fa", h.SetupTwoFactor)
 		api.POST("/auth/verify-2fa", h.VerifyTwoFactor)
-		api.POST("/auth/fcm-token", h.SaveFCMToken)
-		api.POST("/v1/auth/setup-2fa", h.SetupTwoFactor)
-		api.POST("/v1/auth/verify-2fa", h.VerifyTwoFactor)
-		api.POST("/v1/auth/fcm-token", h.SaveFCMToken)
+		api.POST("/auth/notification-token", h.SaveNotificationToken)
 	}
 
 	port := os.Getenv("PORT")
