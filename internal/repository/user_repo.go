@@ -48,6 +48,9 @@ func (r *UserRepo) UpdateEmail(id int64, email string) error {
 }
 
 func (r *UserRepo) Create(user *domain.User) error {
+	if user != nil {
+		user.TwoFactorMethod = NormalizeTwoFactorMethod(user.TwoFactorMethod)
+	}
 	return r.db.Create(user).Error
 }
 
