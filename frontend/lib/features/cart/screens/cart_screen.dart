@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/cart_provider.dart';
 import '../../orders/providers/order_provider.dart';
 import '../../../core/utils/currency_formatter.dart';
-import '../../../core/payment/deep_link_launcher.dart';
+import 'kantongin_checkout_screen.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -54,27 +54,18 @@ class _CartScreenState extends State<CartScreen> {
 
     if (result != null) {
       await context.read<CartProvider>().fetchCart();
-      final opened = await DeepLinkLauncher.openWallet(
-        result.paymentIntent.deepLink,
-      );
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            opened
-                ? 'Checkout berhasil. Kantongin dibuka untuk pembayaran.'
-                : 'Checkout berhasil, tapi aplikasi wallet belum terpasang.',
-          ),
-          backgroundColor: opened ? Colors.green : Colors.orange,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KantonginCheckoutScreen(result: result),
         ),
       );
-      Navigator.pushNamed(context, '/orders');
     } else {
       final err = context.read<OrderProvider>().errorMessage;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(err ?? 'Checkout failed'),
+          content: Text(err ?? 'Checkout gagal'),
           backgroundColor: Colors.red,
         ),
       );
@@ -89,7 +80,7 @@ class _CartScreenState extends State<CartScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'My Cart',
+          'Keranjang',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -100,7 +91,7 @@ class _CartScreenState extends State<CartScreen> {
             TextButton(
               onPressed: cart.isLoading ? null : () => cart.clearCart(),
               child: const Text(
-                'Clear all',
+                'Hapus semua',
                 style: TextStyle(color: Colors.red),
               ),
             ),
@@ -121,7 +112,7 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Your cart is empty',
+                    'Keranjang kamu kosong',
                     style: TextStyle(color: Colors.grey[600], fontSize: 16),
                   ),
                   const SizedBox(height: 16),
@@ -131,7 +122,7 @@ class _CartScreenState extends State<CartScreen> {
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Browse Products'),
+                    child: const Text('Lihat Produk'),
                   ),
                 ],
               ),
@@ -305,8 +296,8 @@ class _CartScreenState extends State<CartScreen> {
                               : const Icon(Icons.account_balance_wallet),
                           label: Text(
                             orderLoading
-                                ? 'Processing...'
-                                : 'Pay with Kantongin',
+                                ? 'Memproses...'
+                                : 'Bayar dengan Kantongin',
                             style: const TextStyle(fontSize: 16),
                           ),
                         ),

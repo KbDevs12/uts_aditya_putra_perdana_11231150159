@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/order_provider.dart';
 import '../../../core/utils/currency_formatter.dart';
-import '../../../core/payment/deep_link_launcher.dart';
+import '../../cart/screens/kantongin_checkout_screen.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final int orderId;
@@ -53,16 +53,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
 
-    final opened = await DeepLinkLauncher.openWallet(intent.deepLink);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          opened
-              ? 'Kantongin dibuka untuk pembayaran.'
-              : 'Aplikasi Kantongin belum terpasang.',
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KantonginCheckoutScreen.fromIntent(
+          paymentIntent: intent,
+          orderId: widget.orderId,
         ),
-        backgroundColor: opened ? Colors.green : Colors.orange,
       ),
     );
   }
