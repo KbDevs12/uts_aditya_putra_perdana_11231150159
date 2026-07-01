@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"time"
-
 	"backend/internal/domain"
+	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -93,4 +93,19 @@ func (r *UserRepo) UpdateNotificationToken(id int64, token string) error {
 
 func (r *UserRepo) TouchLastLogin(id int64, at time.Time) error {
 	return r.db.Model(&domain.User{}).Where("id = ?", id).Update("last_login_at", at).Error
+}
+
+func NormalizeTwoFactorMethod(method string) string {
+	method = strings.TrimSpace(strings.ToLower(method))
+
+	switch method {
+	case "", "email", "email_otp", "smtp":
+		return "smtp"
+	case "authenticator", "google_authenticator", "totp":
+		return "totp"
+	case "notif", "notification", "push", "fcm":
+		return "notif"
+	default:
+		return method
+	}
 }
