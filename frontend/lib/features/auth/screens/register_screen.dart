@@ -132,8 +132,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.length < 6)
+                    if (v == null || v.length < 6) {
                       return 'Password min 6 characters';
+                    }
                     return null;
                   },
                 ),
