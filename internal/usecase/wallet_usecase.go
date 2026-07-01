@@ -40,20 +40,42 @@ func (u *WalletUsecase) GetTransactions(userID int64, limit int) ([]domain.Walle
 	return u.walletRepo.ListTransactions(userID, limit)
 }
 
-func (u *WalletUsecase) SetPIN(userID int64, pin string) error {
+func (u *WalletUsecase) SetPIN(userID int64, currentPIN string, newPIN string) error {
+	if err := validatePIN(newPIN); err != nil {
+		return err
+	}
+
+	wallet, err := u.walletRepo.GetOrCreateWallet(userID)
+	if err != nil {
+		return err
+	}
+
+	if wallet.PINHash != "" {
+		if strings.TrimSpace(currentPIN) == "" {
+			return errors.New("current pin is required")
+		}
+
+		if wallet.PINHash != hashPIN(currentPIN) {
+			return errors.New("invalid current pin")
+		}
+	}
+
+	pinHash := hashPIN(newPIN)
+	return u.walletRepo.UpdatePINHash(userID, pinHash)
+}
+
+func validatePIN(pin string) error {
 	if len(pin) != 6 {
 		return errors.New("pin must be exactly 6 digits")
 	}
+
 	for _, ch := range pin {
 		if ch < '0' || ch > '9' {
 			return errors.New("pin must contain digits only")
 		}
 	}
-	if _, err := u.walletRepo.GetOrCreateWallet(userID); err != nil {
-		return err
-	}
-	pinHash := hashPIN(pin)
-	return u.walletRepo.UpdatePINHash(userID, pinHash)
+
+	return nil
 }
 
 func (u *WalletUsecase) VerifyPIN(userID int64, pin string) error {
