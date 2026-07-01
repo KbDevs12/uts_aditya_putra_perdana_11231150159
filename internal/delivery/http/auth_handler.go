@@ -133,18 +133,18 @@ func (h *Handler) VerifyTwoFactor(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "2fa verified"})
 }
 
-func (h *Handler) SaveFCMToken(c *gin.Context) {
+func (h *Handler) SaveNotificationToken(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 	var req struct {
 		Token string `json:"token" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "fcm token is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "notification token is required"})
 		return
 	}
-	if err := h.authUC.SaveFCMToken(userID, req.Token); err != nil {
+	if err := h.authUC.SaveNotificationToken(userID, req.Token); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "fcm token saved"})
+	c.JSON(http.StatusOK, gin.H{"message": "notification token saved"})
 }

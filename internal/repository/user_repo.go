@@ -87,8 +87,8 @@ func (r *UserRepo) MarkTOTPVerified(id int64, at time.Time) error {
 	}).Error
 }
 
-func (r *UserRepo) UpdateFCMToken(id int64, token string) error {
-	return r.db.Model(&domain.User{}).Where("id = ?", id).Update("fcm_token", token).Error
+func (r *UserRepo) UpdateNotificationToken(id int64, token string) error {
+	return r.db.Model(&domain.User{}).Where("id = ?", id).Update("notification_token", token).Error
 }
 
 func (r *UserRepo) TouchLastLogin(id int64, at time.Time) error {

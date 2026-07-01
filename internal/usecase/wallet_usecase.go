@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"backend/internal/domain"
@@ -61,11 +62,10 @@ func (u *WalletUsecase) VerifyPIN(userID int64, pin string) error {
 		return err
 	}
 	if wallet.PINHash == "" {
-		// MVP: kalau user belum set PIN, 123456 diterima agar demo ujian tidak buntu.
-		if pin == "123456" {
-			return nil
-		}
-		return errors.New("pin is not set")
+		return errors.New("pin setup required")
+	}
+	if strings.TrimSpace(pin) == "" {
+		return errors.New("pin is required")
 	}
 	if wallet.PINHash != hashPIN(pin) {
 		return errors.New("invalid pin")
@@ -182,6 +182,9 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string, pin s
 		if err != nil {
 			return errors.New("payment intent not found")
 		}
+		if intent.UserID != walletUserID {
+			return errors.New("payment intent does not belong to this account")
+		}
 		if intent.Status != domain.PaymentIntentPending {
 			return errors.New("payment intent is not pending")
 		}
@@ -198,13 +201,17 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string, pin s
 		} else if err != nil {
 			return err
 		}
+		if wallet.PINHash == "" {
+			return errors.New("pin setup required")
+		}
+		if strings.TrimSpace(pin) == "" {
+			return errors.New("pin is required")
+		}
+		if wallet.PINHash != hashPIN(pin) {
+			return errors.New("invalid pin")
+		}
 		if wallet.Balance < intent.Amount {
 			return errors.New("insufficient balance")
-		}
-		if wallet.PINHash != "" || pin != "" {
-			if err := u.VerifyPIN(walletUserID, pin); err != nil {
-				return err
-			}
 		}
 
 		before := wallet.Balance
@@ -234,7 +241,7 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string, pin s
 			return err
 		}
 
-		if err := u.orderRepo.MarkPaid(tx, intent.OrderID, "global_wallet", now); err != nil {
+		if err := u.orderRepo.MarkPaid(tx, intent.OrderID, "kantongin", now); err != nil {
 			return err
 		}
 
@@ -248,10 +255,99 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string, pin s
 	return &paidIntent, &trx, nil
 }
 
+func (u *WalletUsecase) Transfer(senderID int64, receiverID int64, receiverLabel string, amount float64, pin string) (*domain.WalletTransaction, *domain.WalletTransaction, error) {
+	if senderID == receiverID {
+		return nil, nil, errors.New("receiver must be different from sender")
+	}
+	if amount <= 0 {
+		return nil, nil, errors.New("amount must be greater than 0")
+	}
+	if strings.TrimSpace(pin) == "" {
+		return nil, nil, errors.New("pin is required")
+	}
+
+	var debitTrx domain.WalletTransaction
+	var creditTrx domain.WalletTransaction
+	referenceID := fmt.Sprintf("TRF-%d", time.Now().UnixNano())
+
+	err := u.walletRepo.DB().Transaction(func(tx *gorm.DB) error {
+		senderWallet, err := u.walletRepo.GetWalletForUpdate(tx, senderID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("wallet not found")
+		}
+		if err != nil {
+			return err
+		}
+		if senderWallet.PINHash == "" {
+			return errors.New("pin setup required")
+		}
+		if senderWallet.PINHash != hashPIN(pin) {
+			return errors.New("invalid pin")
+		}
+		if senderWallet.Balance < amount {
+			return errors.New("insufficient balance")
+		}
+
+		receiverWallet, err := u.walletRepo.GetWalletForUpdate(tx, receiverID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			receiverWallet = &domain.WalletAccount{UserID: receiverID, Balance: 0}
+			if err := tx.Create(receiverWallet).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+
+		senderBefore := senderWallet.Balance
+		receiverBefore := receiverWallet.Balance
+		senderWallet.Balance -= amount
+		receiverWallet.Balance += amount
+
+		if err := tx.Save(senderWallet).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(receiverWallet).Error; err != nil {
+			return err
+		}
+
+		debitTrx = domain.WalletTransaction{
+			WalletID:      senderWallet.ID,
+			UserID:        senderID,
+			ReferenceType: "transfer_out",
+			ReferenceID:   referenceID,
+			Type:          domain.WalletTransactionDebit,
+			Amount:        amount,
+			Description:   fmt.Sprintf("Transfer ke %s", receiverLabel),
+			BalanceBefore: senderBefore,
+			BalanceAfter:  senderWallet.Balance,
+		}
+		if err := u.walletRepo.CreateTransaction(tx, &debitTrx); err != nil {
+			return err
+		}
+
+		creditTrx = domain.WalletTransaction{
+			WalletID:      receiverWallet.ID,
+			UserID:        receiverID,
+			ReferenceType: "transfer_in",
+			ReferenceID:   referenceID,
+			Type:          domain.WalletTransactionCredit,
+			Amount:        amount,
+			Description:   "Terima transfer Kantongin",
+			BalanceBefore: receiverBefore,
+			BalanceAfter:  receiverWallet.Balance,
+		}
+		return u.walletRepo.CreateTransaction(tx, &creditTrx)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return &debitTrx, &creditTrx, nil
+}
+
 func hashPIN(pin string) string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "kantongin-mvp"
+		secret = "kantongin-secret"
 	}
 	sum := sha256.Sum256([]byte(secret + ":" + pin))
 	return hex.EncodeToString(sum[:])

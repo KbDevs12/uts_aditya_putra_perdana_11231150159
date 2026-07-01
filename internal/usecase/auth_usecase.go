@@ -40,10 +40,9 @@ func NewAuthUsecase(userRepo *repository.UserRepo, redisClient *redis.Client) *A
 	return &AuthUsecase{userRepo: userRepo, redisClient: redisClient}
 }
 
-// appNeedsBackendOTP tells whether the given app relies on this backend's
-// custom SMTP OTP flow for email verification. E-commerce verifies email
-// using Firebase's own sendEmailVerification() link on the client side, so
-// it must NOT also receive the Kantongin-branded backend OTP email.
+// appNeedsBackendOTP tells whether the given app uses backend OTP email verification.
+// E-commerce verifies email using Firebase's own sendEmailVerification() link on the client side,
+// so it must not also receive the Kantongin-branded backend OTP email.
 func appNeedsBackendOTP(app string) bool {
 	return strings.EqualFold(strings.TrimSpace(app), "kantongin")
 }
@@ -78,7 +77,7 @@ func (u *AuthUsecase) Register(idToken, name, app string) error {
 		Email:            identity.Email,
 		Name:             name,
 		EmailVerified:    identity.EmailVerified,
-		TwoFactorMethod:  "smtp",
+		TwoFactorMethod:  "email",
 		TwoFactorEnabled: false,
 	}
 	if err := u.userRepo.Create(newUser); err != nil {
@@ -88,6 +87,10 @@ func (u *AuthUsecase) Register(idToken, name, app string) error {
 		return u.SendEmailOTP(identity.Email, app)
 	}
 	return nil
+}
+
+func (u *AuthUsecase) FindUserByEmail(email string) (*domain.User, error) {
+	return u.userRepo.FindByEmail(strings.TrimSpace(strings.ToLower(email)))
 }
 
 func (u *AuthUsecase) Login(idToken string) (string, bool, string, error) {
@@ -117,7 +120,11 @@ func (u *AuthUsecase) Login(idToken string) (string, bool, string, error) {
 
 	now := time.Now()
 	_ = u.userRepo.TouchLastLogin(user.ID, now)
-	return config.GenerateJWT(user.ID, user.Email), user.TwoFactorEnabled, user.TwoFactorMethod, nil
+	method := user.TwoFactorMethod
+	if method == "smtp" {
+		method = "email"
+	}
+	return config.GenerateJWT(user.ID, user.Email), user.TwoFactorEnabled, method, nil
 }
 
 func (u *AuthUsecase) SendEmailOTP(email, app string) error {
@@ -138,7 +145,7 @@ func (u *AuthUsecase) SendEmailOTP(email, app string) error {
 			return err
 		}
 	} else {
-		log.Printf("Redis disabled, OTP not persisted. Email=%s Code=%s", email, code)
+		log.Printf("OTP storage disabled. Email=%s Code=%s", email, code)
 	}
 
 	return config.SendOTPEmail(email, code, app)
@@ -168,10 +175,13 @@ func (u *AuthUsecase) VerifyEmailOTP(email, code string) (string, error) {
 func (u *AuthUsecase) SetupTwoFactor(userID int64, method string) (map[string]string, error) {
 	method = strings.TrimSpace(strings.ToLower(method))
 	if method == "" {
-		method = "smtp"
+		method = "email"
 	}
-	if method != "smtp" && method != "totp" && method != "notif" {
-		return nil, errors.New("2fa method must be smtp, totp, or notif")
+	if method == "smtp" {
+		method = "email"
+	}
+	if method != "email" && method != "totp" {
+		return nil, errors.New("2fa method must be email or authenticator")
 	}
 
 	user, err := u.userRepo.FindByID(userID)
@@ -184,7 +194,7 @@ func (u *AuthUsecase) SetupTwoFactor(userID int64, method string) (map[string]st
 	}
 
 	switch method {
-	case "smtp":
+	case "email":
 		if err := u.SendEmailOTP(user.Email, "kantongin"); err != nil {
 			return nil, err
 		}
@@ -218,11 +228,6 @@ func (u *AuthUsecase) SetupTwoFactor(userID int64, method string) (map[string]st
 		response["period_seconds"] = "30"
 		response["message"] = "Scan QR di Google Authenticator, lalu masukkan kode 6 digit yang muncul."
 		return response, nil
-	case "notif":
-		// Untuk MVP, push notification tetap berupa flow approval sederhana.
-		// FCM token tetap disimpan lewat endpoint /auth/fcm-token.
-		response["message"] = "Simulasi push notification aktif. Masukkan kode 000000 untuk approve demo."
-		return response, nil
 	default:
 		return nil, errors.New("unsupported 2fa method")
 	}
@@ -238,16 +243,19 @@ func (u *AuthUsecase) VerifyTwoFactor(userID int64, method, code string) error {
 	if method == "" {
 		method = user.TwoFactorMethod
 	}
+	if method == "smtp" {
+		method = "email"
+	}
 
 	switch method {
-	case "smtp":
+	case "email":
 		if len(code) != 6 {
 			return errors.New("6 digit code is required")
 		}
 		if err := u.verifyStoredEmailOTP(user.Email, code); err != nil {
 			return err
 		}
-		return u.userRepo.UpdateTwoFactor(userID, "smtp", true)
+		return u.userRepo.UpdateTwoFactor(userID, "email", true)
 	case "totp":
 		if len(code) != 6 {
 			return errors.New("6 digit code is required")
@@ -259,21 +267,16 @@ func (u *AuthUsecase) VerifyTwoFactor(userID int64, method, code string) error {
 			return errors.New("invalid authenticator code")
 		}
 		return u.userRepo.MarkTOTPVerified(userID, time.Now())
-	case "notif":
-		if code != "000000" && !strings.EqualFold(code, "approved") {
-			return errors.New("push approval is required")
-		}
-		return u.userRepo.UpdateTwoFactor(userID, "notif", true)
 	default:
-		return errors.New("2fa method must be smtp, totp, or notif")
+		return errors.New("2fa method must be email or authenticator")
 	}
 }
 
-func (u *AuthUsecase) SaveFCMToken(userID int64, token string) error {
+func (u *AuthUsecase) SaveNotificationToken(userID int64, token string) error {
 	if strings.TrimSpace(token) == "" {
-		return errors.New("fcm token is required")
+		return errors.New("notification token is required")
 	}
-	return u.userRepo.UpdateFCMToken(userID, token)
+	return u.userRepo.UpdateNotificationToken(userID, token)
 }
 
 func (u *AuthUsecase) verifyStoredEmailOTP(email, code string) error {
@@ -291,10 +294,7 @@ func (u *AuthUsecase) verifyStoredEmailOTP(email, code string) error {
 		return nil
 	}
 
-	if os.Getenv("ALLOW_MOCK_OTP") == "true" && code == "123456" {
-		return nil
-	}
-	return errors.New("redis is required for otp verification")
+	return errors.New("otp storage is required for verification")
 }
 
 func verifyFirebaseToken(idToken string) (*FirebaseIdentity, error) {
@@ -309,7 +309,7 @@ func verifyFirebaseToken(idToken string) (*FirebaseIdentity, error) {
 		}
 		email := idToken
 		if !isEmail(email) {
-			email = "demo@kantongin.local"
+			email = "user@kantongin.local"
 		}
 		hash := sha256.Sum256([]byte(email))
 		return &FirebaseIdentity{UID: hex.EncodeToString(hash[:8]), Email: email, EmailVerified: true}, nil

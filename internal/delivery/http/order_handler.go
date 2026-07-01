@@ -25,12 +25,15 @@ func (h *Handler) Checkout(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"order": order,
 		"payment_intent": gin.H{
-			"token":      intent.Token,
-			"amount":     intent.Amount,
-			"merchant":   intent.MerchantName,
-			"status":     intent.Status,
-			"deep_link":  intent.DeepLink,
-			"expires_at": intent.ExpiresAt,
+			"token":         intent.Token,
+			"amount":        intent.Amount,
+			"merchant":      intent.MerchantName,
+			"merchant_name": intent.MerchantName,
+			"status":        intent.Status,
+			"deep_link":     intent.DeepLink,
+			"expires_at":    intent.ExpiresAt,
+			"reference":     "Order #" + strconv.FormatInt(order.ID, 10),
+			"note":          "Pembayaran e-commerce melalui Kantongin",
 		},
 	})
 }
@@ -88,11 +91,14 @@ func (h *Handler) CreateOrderPaymentIntent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token":      intent.Token,
-		"amount":     intent.Amount,
-		"merchant":   intent.MerchantName,
-		"status":     intent.Status,
-		"deep_link":  intent.DeepLink,
-		"expires_at": intent.ExpiresAt,
+		"token":         intent.Token,
+		"amount":        intent.Amount,
+		"merchant":      intent.MerchantName,
+		"merchant_name": intent.MerchantName,
+		"status":        intent.Status,
+		"deep_link":     intent.DeepLink,
+		"expires_at":    intent.ExpiresAt,
+		"reference":     "Order #" + strconv.FormatInt(order.ID, 10),
+		"note":          "Pembayaran e-commerce melalui Kantongin",
 	})
 }
