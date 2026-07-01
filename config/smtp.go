@@ -9,7 +9,18 @@ import (
 	"strings"
 )
 
-func SendOTPEmail(toEmail, code string) error {
+func appDisplayName(app string) string {
+	switch strings.ToLower(strings.TrimSpace(app)) {
+	case "kantongin":
+		return "Kantongin"
+	case "ecommerce", "e-commerce":
+		return "Fragrance App"
+	default:
+		return "Kantongin"
+	}
+}
+
+func SendOTPEmail(toEmail, code, app string) error {
 	host := strings.TrimSpace(os.Getenv("SMTP_HOST"))
 	port := strings.TrimSpace(os.Getenv("SMTP_PORT"))
 	username := strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
@@ -27,9 +38,10 @@ func SendOTPEmail(toEmail, code string) error {
 		return fmt.Errorf("invalid SMTP_PORT: %w", err)
 	}
 
+	brand := appDisplayName(app)
 	auth := smtp.PlainAuth("", username, password, host)
-	subject := "Kode OTP Kantongin"
-	body := fmt.Sprintf("Kode OTP Kantongin kamu adalah %s. Kode berlaku 10 menit. Abaikan email ini jika bukan kamu.", code)
+	subject := fmt.Sprintf("Kode OTP %s", brand)
+	body := fmt.Sprintf("Kode OTP %s kamu adalah %s. Kode berlaku 10 menit. Abaikan email ini jika bukan kamu.", brand, code)
 	message := "From: " + from + "\r\n" +
 		"To: " + toEmail + "\r\n" +
 		"Subject: " + subject + "\r\n" +
