@@ -10,6 +10,7 @@ func (h *Handler) Register(c *gin.Context) {
 	var req struct {
 		Token string `json:"token" binding:"required"`
 		Name  string `json:"name"`
+		App   string `json:"app"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -17,7 +18,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	if err := h.authUC.Register(req.Token, req.Name); err != nil {
+	if err := h.authUC.Register(req.Token, req.Name, req.App); err != nil {
 		status := http.StatusInternalServerError
 		if err.Error() == "invalid firebase token" {
 			status = http.StatusUnauthorized
@@ -64,12 +65,16 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) SendEmailOTP(c *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required"`
+		App   string `json:"app"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
 		return
 	}
-	if err := h.authUC.SendEmailOTP(req.Email); err != nil {
+	if req.App == "" {
+		req.App = "kantongin"
+	}
+	if err := h.authUC.SendEmailOTP(req.Email, req.App); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
