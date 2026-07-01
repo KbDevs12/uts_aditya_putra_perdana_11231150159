@@ -81,20 +81,30 @@ func (h *Handler) GetPaymentIntent(c *gin.Context) {
 
 func (h *Handler) SetWalletPIN(c *gin.Context) {
 	userID := c.GetInt64("user_id")
+
 	var req struct {
-		PIN string `json:"pin" binding:"required"`
+		CurrentPIN string `json:"current_pin"`
+		PIN        string `json:"pin" binding:"required"`
 	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "pin is required"})
 		return
 	}
-	if err := h.walletUC.SetPIN(userID, req.PIN); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	if err := h.walletUC.SetPIN(userID, req.CurrentPIN, req.PIN); err != nil {
+		status := http.StatusBadRequest
+
+		if err.Error() == "current pin is required" || err.Error() == "invalid current pin" {
+			status = http.StatusUnauthorized
+		}
+
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "pin saved"})
 }
-
 func (h *Handler) VerifyWalletPIN(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 	var req struct {
