@@ -6,9 +6,16 @@ require (
 	firebase.google.com/go v3.13.0+incompatible
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/pquerna/otp v1.5.0
+	github.com/redis/go-redis/v9 v9.21.0
 	google.golang.org/api v0.276.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
+)
+
+require (
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 )
 
 require (
