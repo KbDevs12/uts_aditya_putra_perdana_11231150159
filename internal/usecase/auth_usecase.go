@@ -77,7 +77,7 @@ func (u *AuthUsecase) Register(idToken, name, app string) error {
 		Email:            identity.Email,
 		Name:             name,
 		EmailVerified:    identity.EmailVerified,
-		TwoFactorMethod:  "email",
+		TwoFactorMethod:  repository.NormalizeTwoFactorMethod("smtp"),
 		TwoFactorEnabled: false,
 	}
 	if err := u.userRepo.Create(newUser); err != nil {
