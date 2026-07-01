@@ -40,7 +40,15 @@ func NewAuthUsecase(userRepo *repository.UserRepo, redisClient *redis.Client) *A
 	return &AuthUsecase{userRepo: userRepo, redisClient: redisClient}
 }
 
-func (u *AuthUsecase) Register(idToken, name string) error {
+// appNeedsBackendOTP tells whether the given app relies on this backend's
+// custom SMTP OTP flow for email verification. E-commerce verifies email
+// using Firebase's own sendEmailVerification() link on the client side, so
+// it must NOT also receive the Kantongin-branded backend OTP email.
+func appNeedsBackendOTP(app string) bool {
+	return strings.EqualFold(strings.TrimSpace(app), "kantongin")
+}
+
+func (u *AuthUsecase) Register(idToken, name, app string) error {
 	identity, err := verifyFirebaseToken(idToken)
 	if err != nil {
 		return err
@@ -59,7 +67,10 @@ func (u *AuthUsecase) Register(idToken, name string) error {
 		if err := u.userRepo.Save(existing); err != nil {
 			return err
 		}
-		return u.SendEmailOTP(identity.Email)
+		if appNeedsBackendOTP(app) {
+			return u.SendEmailOTP(identity.Email, app)
+		}
+		return nil
 	}
 
 	newUser := &domain.User{
@@ -73,7 +84,10 @@ func (u *AuthUsecase) Register(idToken, name string) error {
 	if err := u.userRepo.Create(newUser); err != nil {
 		return err
 	}
-	return u.SendEmailOTP(identity.Email)
+	if appNeedsBackendOTP(app) {
+		return u.SendEmailOTP(identity.Email, app)
+	}
+	return nil
 }
 
 func (u *AuthUsecase) Login(idToken string) (string, bool, string, error) {
@@ -106,7 +120,7 @@ func (u *AuthUsecase) Login(idToken string) (string, bool, string, error) {
 	return config.GenerateJWT(user.ID, user.Email), user.TwoFactorEnabled, user.TwoFactorMethod, nil
 }
 
-func (u *AuthUsecase) SendEmailOTP(email string) error {
+func (u *AuthUsecase) SendEmailOTP(email, app string) error {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if !isEmail(email) {
 		return errors.New("valid email is required")
@@ -124,11 +138,10 @@ func (u *AuthUsecase) SendEmailOTP(email string) error {
 			return err
 		}
 	} else {
-		// Fallback untuk MVP lokal kalau Redis belum dinyalakan.
 		log.Printf("Redis disabled, OTP not persisted. Email=%s Code=%s", email, code)
 	}
 
-	return config.SendOTPEmail(email, code)
+	return config.SendOTPEmail(email, code, app)
 }
 
 func (u *AuthUsecase) VerifyEmailOTP(email, code string) (string, error) {
@@ -172,7 +185,7 @@ func (u *AuthUsecase) SetupTwoFactor(userID int64, method string) (map[string]st
 
 	switch method {
 	case "smtp":
-		if err := u.SendEmailOTP(user.Email); err != nil {
+		if err := u.SendEmailOTP(user.Email, "kantongin"); err != nil {
 			return nil, err
 		}
 		response["message"] = "OTP 6 digit sudah dikirim ke email. Masukkan kode untuk mengaktifkan 2FA Email."
