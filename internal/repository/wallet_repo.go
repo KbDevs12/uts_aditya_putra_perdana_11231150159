@@ -66,3 +66,11 @@ func (r *WalletRepo) GetPaymentIntentForUpdate(tx *gorm.DB, token string) (*doma
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token = ?", token).First(&intent).Error
 	return &intent, err
 }
+
+func (r *WalletRepo) SavePaymentIntent(intent *domain.PaymentIntent) error {
+	return r.db.Save(intent).Error
+}
+
+func (r *WalletRepo) UpdatePINHash(userID int64, pinHash string) error {
+	return r.db.Model(&domain.WalletAccount{}).Where("user_id = ?", userID).Update("pin_hash", pinHash).Error
+}

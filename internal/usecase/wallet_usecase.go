@@ -1,8 +1,11 @@
 package usecase
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -12,16 +15,20 @@ import (
 	"backend/internal/domain"
 	"backend/internal/repository"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type WalletUsecase struct {
-	walletRepo *repository.WalletRepo
-	orderRepo  *repository.OrderRepo
+	walletRepo  *repository.WalletRepo
+	orderRepo   *repository.OrderRepo
+	redisClient *redis.Client
 }
 
-func NewWalletUsecase(walletRepo *repository.WalletRepo, orderRepo *repository.OrderRepo) *WalletUsecase {
-	return &WalletUsecase{walletRepo: walletRepo, orderRepo: orderRepo}
+const paymentIntentCachePrefix = "wallet:payment_intent:"
+
+func NewWalletUsecase(walletRepo *repository.WalletRepo, orderRepo *repository.OrderRepo, redisClient *redis.Client) *WalletUsecase {
+	return &WalletUsecase{walletRepo: walletRepo, orderRepo: orderRepo, redisClient: redisClient}
 }
 
 func (u *WalletUsecase) GetWallet(userID int64) (*domain.WalletAccount, error) {
@@ -30,6 +37,40 @@ func (u *WalletUsecase) GetWallet(userID int64) (*domain.WalletAccount, error) {
 
 func (u *WalletUsecase) GetTransactions(userID int64, limit int) ([]domain.WalletTransaction, error) {
 	return u.walletRepo.ListTransactions(userID, limit)
+}
+
+func (u *WalletUsecase) SetPIN(userID int64, pin string) error {
+	if len(pin) != 6 {
+		return errors.New("pin must be exactly 6 digits")
+	}
+	for _, ch := range pin {
+		if ch < '0' || ch > '9' {
+			return errors.New("pin must contain digits only")
+		}
+	}
+	if _, err := u.walletRepo.GetOrCreateWallet(userID); err != nil {
+		return err
+	}
+	pinHash := hashPIN(pin)
+	return u.walletRepo.UpdatePINHash(userID, pinHash)
+}
+
+func (u *WalletUsecase) VerifyPIN(userID int64, pin string) error {
+	wallet, err := u.walletRepo.GetOrCreateWallet(userID)
+	if err != nil {
+		return err
+	}
+	if wallet.PINHash == "" {
+		// MVP: kalau user belum set PIN, 123456 diterima agar demo ujian tidak buntu.
+		if pin == "123456" {
+			return nil
+		}
+		return errors.New("pin is not set")
+	}
+	if wallet.PINHash != hashPIN(pin) {
+		return errors.New("invalid pin")
+	}
+	return nil
 }
 
 func (u *WalletUsecase) TopUp(userID int64, amount float64, description string) (*domain.WalletAccount, *domain.WalletTransaction, error) {
@@ -114,6 +155,7 @@ func (u *WalletUsecase) CreatePaymentIntent(orderID, userID int64, amount float6
 	if err := u.orderRepo.AttachPaymentIntent(orderID, token); err != nil {
 		return nil, err
 	}
+	u.cachePaymentIntent(context.Background(), intent)
 	return intent, nil
 }
 
@@ -124,11 +166,13 @@ func (u *WalletUsecase) GetPaymentIntent(token string) (*domain.PaymentIntent, e
 	}
 	if intent.Status == domain.PaymentIntentPending && time.Now().After(intent.ExpiresAt) {
 		intent.Status = domain.PaymentIntentExpired
+		_ = u.walletRepo.SavePaymentIntent(intent)
+		u.deletePaymentIntentCache(context.Background(), token)
 	}
 	return intent, nil
 }
 
-func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string) (*domain.PaymentIntent, *domain.WalletTransaction, error) {
+func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string, pin string) (*domain.PaymentIntent, *domain.WalletTransaction, error) {
 	var paidIntent domain.PaymentIntent
 	var trx domain.WalletTransaction
 	now := time.Now()
@@ -156,6 +200,11 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string) (*dom
 		}
 		if wallet.Balance < intent.Amount {
 			return errors.New("insufficient balance")
+		}
+		if wallet.PINHash != "" || pin != "" {
+			if err := u.VerifyPIN(walletUserID, pin); err != nil {
+				return err
+			}
 		}
 
 		before := wallet.Balance
@@ -195,7 +244,17 @@ func (u *WalletUsecase) PayPaymentIntent(walletUserID int64, token string) (*dom
 	if err != nil {
 		return nil, nil, err
 	}
+	u.deletePaymentIntentCache(context.Background(), token)
 	return &paidIntent, &trx, nil
+}
+
+func hashPIN(pin string) string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "kantongin-mvp"
+	}
+	sum := sha256.Sum256([]byte(secret + ":" + pin))
+	return hex.EncodeToString(sum[:])
 }
 
 func generateToken(byteLen int) (string, error) {
@@ -216,4 +275,33 @@ func buildWalletDeepLink(token string, amount float64, merchantName string) stri
 	q.Set("amount", fmt.Sprintf("%.0f", amount))
 	q.Set("merchant", merchantName)
 	return fmt.Sprintf("%s://pay?%s", scheme, q.Encode())
+}
+
+func paymentIntentCacheKey(token string) string {
+	return paymentIntentCachePrefix + token
+}
+
+func (u *WalletUsecase) cachePaymentIntent(ctx context.Context, intent *domain.PaymentIntent) {
+	if u.redisClient == nil || intent == nil || intent.Token == "" {
+		return
+	}
+
+	ttl := time.Until(intent.ExpiresAt)
+	if ttl <= 0 {
+		return
+	}
+
+	payload, err := json.Marshal(intent)
+	if err != nil {
+		return
+	}
+
+	_ = u.redisClient.Set(ctx, paymentIntentCacheKey(intent.Token), payload, ttl).Err()
+}
+
+func (u *WalletUsecase) deletePaymentIntentCache(ctx context.Context, token string) {
+	if u.redisClient == nil || token == "" {
+		return
+	}
+	_ = u.redisClient.Del(ctx, paymentIntentCacheKey(token)).Err()
 }
