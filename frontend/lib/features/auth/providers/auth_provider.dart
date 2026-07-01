@@ -41,7 +41,7 @@ class AuthProvider extends ChangeNotifier {
 
       await _api.dio.post(
         AppConstant.register,
-        data: {'token': idToken, 'name': name},
+        data: {'token': idToken, 'name': name, 'app': 'ecommerce'},
       );
 
       await _firebaseAuth.signOut();
