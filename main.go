@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,10 @@ func main() {
 
 	config.InitFirebase()
 	db := config.ConnectDB()
+	redisClient := config.ConnectRedis()
+	if redisClient != nil {
+		defer redisClient.Close()
+	}
 
 	// Repositories
 	userRepo := repository.NewUserRepo(db)
@@ -33,11 +38,11 @@ func main() {
 	walletRepo := repository.NewWalletRepo(db)
 
 	// Usecases
-	authUC := usecase.NewAuthUsecase(userRepo)
+	authUC := usecase.NewAuthUsecase(userRepo, redisClient)
 	productUC := usecase.NewProductUsecase(productRepo)
 	cartUC := usecase.NewCartUsecase(cartRepo, cartItemRepo)
 	orderUC := usecase.NewOrderUsecase(orderRepo, orderItemRepo, cartRepo, cartItemRepo)
-	walletUC := usecase.NewWalletUsecase(walletRepo, orderRepo)
+	walletUC := usecase.NewWalletUsecase(walletRepo, orderRepo, redisClient)
 
 	// Handler
 	h := deliveryHttp.NewHandler(authUC, productUC, cartUC, orderUC, walletUC)
@@ -45,10 +50,33 @@ func main() {
 	r := gin.Default()
 	r.Use(corsMiddleware())
 
+	r.GET("/health", func(c *gin.Context) {
+		redisStatus := "disabled"
+		if redisClient != nil {
+			if err := redisClient.Ping(context.Background()).Err(); err != nil {
+				redisStatus = "error"
+			} else {
+				redisStatus = "ok"
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"redis":  redisStatus,
+		})
+	})
+
 	// Public routes
 	r.POST("/auth/login", h.Login)
 	r.POST("/auth/register", h.Register)
+	r.POST("/auth/verify-email-otp", h.VerifyEmailOTP)
+	r.POST("/otp/send-email", h.SendEmailOTP)
 	r.GET("/api/payment-intents/:token", h.GetPaymentIntent)
+
+	// Aliases mengikuti dokumen e-money (/v1/...)
+	r.POST("/v1/auth/register", h.Register)
+	r.POST("/v1/auth/verify-token", h.Login)
+	r.POST("/v1/auth/verify-email-otp", h.VerifyEmailOTP)
+	r.POST("/v1/otp/send-email", h.SendEmailOTP)
 
 	// Protected routes
 	api := r.Group("/api", middleware.JWTAuth())
@@ -73,7 +101,17 @@ func main() {
 		api.GET("/wallet", h.GetWallet)
 		api.POST("/wallet/topup", h.TopUpWallet)
 		api.GET("/wallet/transactions", h.GetWalletTransactions)
+		api.POST("/wallet/pin", h.SetWalletPIN)
+		api.POST("/wallet/pin/verify", h.VerifyWalletPIN)
 		api.POST("/payment-intents/:token/pay", h.PayPaymentIntent)
+
+		// MVP 2FA / FCM endpoints
+		api.POST("/auth/setup-2fa", h.SetupTwoFactor)
+		api.POST("/auth/verify-2fa", h.VerifyTwoFactor)
+		api.POST("/auth/fcm-token", h.SaveFCMToken)
+		api.POST("/v1/auth/setup-2fa", h.SetupTwoFactor)
+		api.POST("/v1/auth/verify-2fa", h.VerifyTwoFactor)
+		api.POST("/v1/auth/fcm-token", h.SaveFCMToken)
 	}
 
 	port := os.Getenv("PORT")
