@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,12 +15,29 @@ type topUpWalletRequest struct {
 
 func (h *Handler) GetWallet(c *gin.Context) {
 	userID := c.GetInt64("user_id")
+	email := c.GetString("email")
 	wallet, err := h.walletUC.GetWallet(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, wallet)
+	ownerName := "Pengguna Kantongin"
+	if email != "" && strings.Contains(email, "@") {
+		ownerName = strings.Title(strings.Split(email, "@")[0])
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"id":                    wallet.ID,
+		"user_id":               wallet.UserID,
+		"balance":               wallet.Balance,
+		"created_at":            wallet.CreatedAt,
+		"updated_at":            wallet.UpdatedAt,
+		"verified":              true,
+		"owner_name":            ownerName,
+		"email":                 email,
+		"active_checkout_count": 0,
+		"saved_payment_count":   1,
+		"pin_enabled":           wallet.PINHash != "",
+	})
 }
 
 func (h *Handler) TopUpWallet(c *gin.Context) {
@@ -29,12 +47,15 @@ func (h *Handler) TopUpWallet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "amount is required and must be greater than 0"})
 		return
 	}
+	if req.Description == "" {
+		req.Description = "Top Up dummy MVP"
+	}
 	wallet, trx, err := h.walletUC.TopUp(userID, req.Amount, req.Description)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"wallet": wallet, "transaction": trx})
+	c.JSON(http.StatusOK, gin.H{"wallet": wallet, "transaction": trx, "mode": "dummy_mvp"})
 }
 
 func (h *Handler) GetWalletTransactions(c *gin.Context) {
@@ -58,14 +79,52 @@ func (h *Handler) GetPaymentIntent(c *gin.Context) {
 	c.JSON(http.StatusOK, intent)
 }
 
+func (h *Handler) SetWalletPIN(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+	var req struct {
+		PIN string `json:"pin" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pin is required"})
+		return
+	}
+	if err := h.walletUC.SetPIN(userID, req.PIN); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "pin saved"})
+}
+
+func (h *Handler) VerifyWalletPIN(c *gin.Context) {
+	userID := c.GetInt64("user_id")
+	var req struct {
+		PIN string `json:"pin" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pin is required"})
+		return
+	}
+	if err := h.walletUC.VerifyPIN(userID, req.PIN); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "pin valid"})
+}
+
 func (h *Handler) PayPaymentIntent(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 	token := c.Param("token")
-	intent, trx, err := h.walletUC.PayPaymentIntent(userID, token)
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	intent, trx, err := h.walletUC.PayPaymentIntent(userID, token, req.PIN)
 	if err != nil {
 		status := http.StatusBadRequest
 		if err.Error() == "insufficient balance" {
 			status = http.StatusPaymentRequired
+		} else if err.Error() == "invalid pin" || err.Error() == "pin is not set" {
+			status = http.StatusUnauthorized
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
