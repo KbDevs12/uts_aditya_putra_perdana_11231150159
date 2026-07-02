@@ -66,7 +66,7 @@ REDIS_USERNAME=default
 REDIS_PASSWORD=
 REDIS_TLS=true
 
-# smtp opsional buat kirim OTP beneran, kalau kosong OTP muncul di terminal aja
+# smtp
 SMTP_HOST=
 SMTP_PORT=
 SMTP_USERNAME=
