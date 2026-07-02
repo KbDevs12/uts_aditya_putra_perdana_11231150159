@@ -1,4 +1,4 @@
-# UTS Mobile Semester 6 — Backend & E-Commerce App
+# UTS Mobile Semester 6 Backend & E-Commerce App
 
 Repo ini isinya backend buat dua aplikasi mobile: e-commerce (parfum) dan Kantongin (e-wallet). Backend-nya satu, dipakai bareng-bareng sama dua app itu lewat Firebase project dan database yang sama. Di sini yang ada cuma backend Go-nya sama frontend e-commerce-nya, Silahkan cek [Repository Kantongin](https://github.com/KbDevs12/wallet-nih) untuk bagian kantongin.
 
@@ -28,7 +28,7 @@ Backend:
 - Go 1.25 + Gin
 - GORM + PostgreSQL
 - Firebase Admin SDK (verifikasi token auth)
-- Redis Cloud (nyimpen OTP sementara — kalau `REDIS_ADDR` kosong, OTP-nya cuma keluar di log, jadi tetap bisa jalan tanpa redis pas development)
+- Redis Cloud (nyimpen OTP sementara kalau `REDIS_ADDR` kosong, OTP-nya cuma keluar di log, jadi tetap bisa jalan tanpa redis pas development)
 - JWT buat session setelah login
 
 Frontend (`/frontend`):
