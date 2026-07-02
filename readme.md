@@ -1,317 +1,124 @@
-# Fragrance App
+# UTS Mobile Semester 6 — Backend & E-Commerce App
 
-Aplikasi katalog dan checkout parfum berbasis **Flutter** dengan backend **Go (Gin)** dan autentikasi **Firebase**. Dibangun sebagai proyek Praktikum UTS dengan menerapkan Clean Architecture dan Provider sebagai state management.
+Repo ini isinya backend buat dua aplikasi mobile: e-commerce (parfum) dan Kantongin (e-wallet). Backend-nya satu, dipakai bareng-bareng sama dua app itu lewat Firebase project dan database yang sama. Di sini yang ada cuma backend Go-nya sama frontend e-commerce-nya, Silahkan cek [Repository Kantongin](https://github.com/KbDevs12/wallet-nih) untuk bagian kantongin.
 
-> **Demo Video**: [https://youtu.be/rxKkao6aBZg](https://youtu.be/rxKkao6aBZg)
+Kalau bingung kenapa ada logic wallet/topup/transfer di backend padahal ini "repo e-commerce", jawabannya karena checkout di app e-commerce bisa dibayar pakai saldo Kantongin. Jadi pas checkout, backend bikin payment intent, terus e-commerce app buka Kantongin lewat deep link buat bayar di sana.
 
----
-
-## Fitur Utama
-
-| Fitur              | Keterangan                                  |
-| ------------------ | ------------------------------------------- |
-| Authentication     | Register & login via Firebase Auth          |
-| Email Verification | Login diblokir sebelum email diverifikasi   |
-| JWT Integration    | Firebase Token ditukar ke JWT backend       |
-| Catalog Product    | List & detail produk dari backend API       |
-| Cart               | Tambah, hapus item, hitung total harga      |
-| Checkout           | Simulasi checkout & riwayat order           |
-| State Management   | Provider + ChangeNotifier + notifyListeners |
-| Clean Architecture | Pemisahan core, features, domain, usecase   |
-
----
-
-## 🗂️ Struktur Proyek
+## Struktur folder
 
 ```
-fragrance-app/                    # ← Root = Go Backend
-│
-├── config/
-│   ├── db.go                          # PostgreSQL connection (GORM)
-│   ├── firebase.go                    # Firebase Admin SDK init
-│   └── jwt.go                         # JWT generate & verify
-│
+.
+├── config/            # koneksi DB, redis, firebase admin, jwt, smtp
 ├── internal/
-│   ├── domain/                        # Entities & repository interfaces
-│   │   ├── user.go
-│   │   ├── product.go
-│   │   ├── cart.go / cart_item.go
-│   │   └── order.go / repository.go
-│   ├── repository/                    # Data access layer (PostgreSQL)
-│   │   ├── user_repo.go
-│   │   ├── product_repo.go
-│   │   ├── cart_repo.go
-│   │   └── order_repo.go
-│   ├── usecase/                       # Business logic
-│   │   ├── auth_usecase.go
-│   │   ├── product_usecase.go
-│   │   ├── cart_usecase.go
-│   │   └── order_usecase.go
-│   ├── delivery/http/                 # HTTP handlers (Gin)
-│   │   ├── handler.go
-│   │   ├── auth_handler.go
-│   │   ├── product_handler.go
-│   │   ├── cart_handler.go
-│   │   └── order_handler.go
-│   └── middleware/
-│       └── jwt.go                     # JWT auth middleware
-│
-├── main.go                            # Entry point + Gin router + Ngrok
-├── go.mod
-├── go.sum
-├── firebase.json                      # Firebase service account key
-├── .env                               # Environment variables
-│
-└── frontend/                     # ← Sub-folder Flutter
-    ├── lib/
-    │   ├── core/
-    │   │   ├── api/
-    │   │   │   └── api_client.dart        # Dio + JWT interceptor
-    │   │   ├── constant/
-    │   │   │   └── app_constant.dart      # Base URL & endpoint
-    │   │   └── utils/
-    │   │       └── currency_formatter.dart
-    │   │
-    │   ├── features/
-    │   │   ├── auth/
-    │   │   │   ├── providers/auth_provider.dart
-    │   │   │   └── screens/
-    │   │   │       ├── login_screen.dart
-    │   │   │       └── register_screen.dart
-    │   │   ├── products/
-    │   │   │   ├── providers/product_provider.dart
-    │   │   │   └── screens/
-    │   │   │       ├── product_list_screen.dart
-    │   │   │       └── product_detail_screen.dart
-    │   │   ├── cart/
-    │   │   │   ├── providers/cart_provider.dart
-    │   │   │   └── screens/cart_screen.dart
-    │   │   └── orders/
-    │   │       ├── providers/order_provider.dart
-    │   │       └── screens/
-    │   │           ├── orders_screen.dart
-    │   │           └── order_detail_screen.dart
-    │   │
-    │   ├── shared/
-    │   │   └── models/models.dart         # ProductModel, CartItemModel, OrderModel
-    │   │
-    │   ├── firebase_options.dart
-    │   └── main.dart                      # MultiProvider setup + AuthGate
-    │
-    └── pubspec.yaml
+│   ├── domain/        # entity + interface repository
+│   ├── repository/    # implementasi query ke postgres (gorm)
+│   ├── usecase/       # business logic
+│   ├── delivery/http/ # handler gin
+│   └── middleware/     # jwt auth middleware
+├── main.go            # entrypoint, routing
+└── frontend/           # app Flutter e-commerce (parfum)
 ```
 
----
+Backend-nya pakai Clean Architecture ala-ala: domain → repository → usecase → delivery. Bukan yang strict banget, disesuaikan sama kebutuhan tugas aja.
 
-## Alur API
+## Tech stack
 
-```
-[Flutter]                    [Go Backend]              [Firebase / DB]
-   │                              │                          │
-   │── Register ──────────────────►                          │
-   │   (email, password)          │── createUser ───────────►│ Firebase Auth
-   │                              │◄── ID Token ─────────────│
-   │   sendEmailVerification ─────────────────────────────── │
-   │                              │── save user ────────────►│ PostgreSQL
-   │                              │                          │
-   │── Login ───────────────────► │                          │
-   │   (ID Token)                 │── verifyIDToken ────────►│ Firebase Auth
-   │                              │── check emailVerified    │
-   │                              │── findByUID ────────────►│ PostgreSQL
-   │◄── JWT (access_token) ───────│                          │
-   │                              │                          │
-   │── GET /api/products ────────►│ [JWT Middleware]         │
-   │   Bearer: JWT                │── query products ───────►│ PostgreSQL
-   │◄── [ ] ProductList ──────────│                          │
-   │                              │                          │
-   │── POST /api/cart ───────────►│ [JWT Middleware]         │
-   │── POST /api/orders/checkout ►│── create order ─────────►│ PostgreSQL
-   │◄── Order created ────────────│                          │
-```
+Backend:
 
----
+- Go 1.25 + Gin
+- GORM + PostgreSQL
+- Firebase Admin SDK (verifikasi token auth)
+- Redis Cloud (nyimpen OTP sementara — kalau `REDIS_ADDR` kosong, OTP-nya cuma keluar di log, jadi tetap bisa jalan tanpa redis pas development)
+- JWT buat session setelah login
 
-## Tech Stack
+Frontend (`/frontend`):
 
-### Frontend (Flutter)
+- Flutter, Provider buat state management
+- Firebase Auth
+- Dio buat HTTP client, disimpen tokennya pakai flutter_secure_storage
+- QR & url_launcher (buat handle deep link ke Kantongin pas checkout)
 
-| Package                           | Kegunaan                              |
-| --------------------------------- | ------------------------------------- |
-| `firebase_core` & `firebase_auth` | Autentikasi Firebase                  |
-| `provider`                        | State management                      |
-| `dio`                             | HTTP client dengan interceptor        |
-| `flutter_secure_storage`          | Simpan JWT secara aman                |
-| `google_fonts`                    | Tipografi (Cormorant Garamond + Jost) |
+## Cara jalanin
 
-### Backend (Go)
+### 1. Backend
 
-| Package                     | Kegunaan                        |
-| --------------------------- | ------------------------------- |
-| `gin-gonic/gin`             | HTTP router & framework         |
-| `firebase.google.com/go`    | Firebase Admin SDK              |
-| `golang-jwt/jwt/v5`         | Generate & verify JWT           |
-| `gorm.io/gorm`              | ORM untuk PostgreSQL            |
-| `joho/godotenv`             | Load environment variables      |
-| `golang.ngrok.com/ngrok/v2` | Public tunnel untuk development |
-
----
-
-## Setup & Menjalankan
-
-### Prasyarat
-
-- Flutter SDK ≥ 3.x
-- Go ≥ 1.21
-- PostgreSQL
-- Firebase project (dengan Email/Password provider aktif)
-- Ngrok account (untuk backend tunnel)
-
-### Backend
+Butuh Go, PostgreSQL, sama service account Firebase.
 
 ```bash
-# 1. Clone repo dan masuk ke root project
-cd fragrance-app
+go mod download
+```
 
-# 2. Salin environment file
-cp .env.example .env
-# Isi: DB_DSN, JWT_SECRET, NGROK_AUTHTOKEN
+Bikin file `.env` di root:
 
-# 3. Letakkan service account Firebase
-# Rename file JSON credential ke: firebase.json
+```env
+PORT=8080
+DB_DSN=host=localhost user=postgres password=postgres dbname=uts_mobile port=5432 sslmode=disable
+JWT_SECRET=ganti-ini-dengan-string-random
 
-# 4. Jalankan backend
+# firebase, download service account json dari firebase console
+FIREBASE_CREDENTIALS=firebase.json
+
+# redis pakai Redis Cloud, bukan redis lokal
+# ambil host:port sama password-nya dari dashboard Redis Cloud
+# kalau REDIS_ADDR dikosongin, OTP cuma ditulis ke log (tetep bisa jalan tanpa redis, tapi buat production ini wajib diisi)
+REDIS_ADDR=redis-xxxxx.c000.us-east-1-2.ec2.redns.redis-cloud.com:xxxxx
+REDIS_USERNAME=default
+REDIS_PASSWORD=
+REDIS_TLS=true
+
+# smtp opsional buat kirim OTP beneran, kalau kosong OTP muncul di terminal aja
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM=
+```
+
+Taruh file service account Firebase sebagai `firebase.json` di root (jangan di-commit, sudah ada di `.gitignore`).
+
+Migrasi tabel jalan otomatis pas start (pakai `AutoMigrate` dari GORM), jadi tinggal:
+
+```bash
 go run main.go
-
-# Output:
-#  NGROK_AUTHTOKEN ditemukan: xxxxxxxx...
-#  Public URL: https://xxxx.ngrok-free.app
 ```
 
-### Frontend (Flutter)
+Server nyala di `http://localhost:8080`. Cek `/health` buat mastiin DB dan redis-nya nyambung.
+
+### 2. Frontend (e-commerce)
 
 ```bash
-# 1. Masuk ke folder Flutter
 cd frontend
-
-# 2. Update base URL di:
-# frontend/lib/core/constant/app_constant.dart
-# static const String baseUrl = "https://xxxx.ngrok-free.app";
-
-# 3. Install dependencies
 flutter pub get
+```
 
-# 4. Jalankan aplikasi
+Base URL API-nya di-hardcode di `lib/core/constant/app_constant.dart` — kalau backend jalan lokal atau lewat ngrok, ganti dulu value `baseUrl`-nya sebelum build.
+
+```bash
 flutter run
 ```
 
-### Environment Variables (`.env`)
+## Endpoint
 
-```env
-DB_DSN=host=localhost user=postgres password=secret dbname=fragrance port=5432 sslmode=disable
-JWT_SECRET=your-super-secret-key
-NGROK_AUTHTOKEN=your-ngrok-token
-```
+Public (nggak perlu token):
 
----
+| Method | Path                          | Buat apa                                         |
+| ------ | ----------------------------- | ------------------------------------------------ |
+| POST   | `/auth/register`              | daftar pakai firebase token                      |
+| POST   | `/auth/login`                 | login, balikin JWT                               |
+| POST   | `/otp/send-email`             | kirim ulang OTP verifikasi email                 |
+| POST   | `/auth/verify-email-otp`      | verifikasi OTP                                   |
+| GET    | `/api/payment-intents/:token` | detail payment intent (dipanggil dari Kantongin) |
 
-## State Management
+Sisanya butuh header `Authorization: Bearer <jwt>`, prefix `/api`:
 
-Proyek ini menggunakan **Provider** sebagai state management sesuai requirement. Setiap fitur memiliki provider sendiri yang extends `ChangeNotifier`.
+- `GET/POST /products`, `/products/:id` — katalog produk
+- `GET/POST/DELETE /cart` — cart
+- `POST /orders/checkout`, `GET /orders`, `GET /orders/:id`, `POST /orders/:id/payment-intent` — order & checkout
+- `GET /wallet`, `POST /wallet/topup`, `POST /wallet/transfer`, `GET /wallet/transactions`, `POST /wallet/pin`, `POST /wallet/pin/verify`, `POST /payment-intents/:token/pay` — semua yang wallet related (dipakai Kantongin, bukan e-commerce)
+- `POST /auth/setup-2fa`, `POST /auth/verify-2fa`, `POST /auth/notification-token` — 2FA & push token
 
-```dart
-// main.dart — semua provider didaftarkan di root
-MultiProvider(
-  providers: [
-    ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuth()),
-    ChangeNotifierProvider(create: (_) => ProductProvider()),
-    ChangeNotifierProvider(create: (_) => CartProvider()),
-    ChangeNotifierProvider(create: (_) => OrderProvider()),
-  ],
-  ...
-)
-```
+## Hal yang perlu diinget
 
-Pattern yang digunakan konsisten di seluruh provider:
-
-```dart
-class CartProvider extends ChangeNotifier {
-  bool _isLoading = false;
-  List<CartItemModel> _items = [];
-
-  // Computed getter — otomatis recalculate
-  double get totalPrice =>
-    _items.fold(0, (sum, item) => sum + (item.price * item.quantity));
-
-  Future<void> fetchCart() async {
-    _isLoading = true;
-    notifyListeners(); // ← UI rebuild: tampilkan loading
-
-    // ... fetch data dari API ...
-
-    _isLoading = false;
-    notifyListeners(); // ← UI rebuild: tampilkan data
-  }
-}
-```
-
----
-
-## Authentication Flow
-
-```
-Register:
-  Flutter → Firebase.createUser → sendEmailVerification
-         → kirim ID Token ke backend → backend simpan user ke DB
-
-Login:
-  Flutter → Firebase.signIn → cek emailVerified (WAJIB)
-         → kirim ID Token ke backend → backend verifyIDToken
-         → backend generate JWT → Flutter simpan JWT (SecureStorage)
-
-Protected API:
-  Flutter → Dio interceptor otomatis attach "Bearer JWT"
-         → backend JWT middleware verify → proses request
-```
-
-> **Catatan**: User yang belum memverifikasi email akan langsung di-`signOut` dan mendapatkan pesan error _"Please verify your email first"_ tanpa bisa masuk ke aplikasi.
-
----
-
-## API Endpoints
-
-### Public
-
-| Method | Endpoint         | Keterangan           |
-| ------ | ---------------- | -------------------- |
-| `POST` | `/auth/register` | Register user baru   |
-| `POST` | `/auth/login`    | Login & dapatkan JWT |
-
-### Protected (butuh `Authorization: Bearer <jwt>`)
-
-| Method   | Endpoint               | Keterangan           |
-| -------- | ---------------------- | -------------------- |
-| `GET`    | `/api/products`        | List semua produk    |
-| `GET`    | `/api/products/:id`    | Detail produk        |
-| `GET`    | `/api/cart`            | Lihat isi cart       |
-| `POST`   | `/api/cart`            | Tambah item ke cart  |
-| `DELETE` | `/api/cart/:id`        | Hapus item dari cart |
-| `DELETE` | `/api/cart`            | Kosongkan cart       |
-| `POST`   | `/api/orders/checkout` | Proses checkout      |
-| `GET`    | `/api/orders`          | Riwayat order        |
-| `GET`    | `/api/orders/:id`      | Detail order         |
-
----
-
-## Demo
-
-Tonton demo lengkap aplikasi di YouTube:
-
-[![Fragrance App Demo](https://img.shields.io/badge/YouTube-Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtu.be/rxKkao6aBZg)
-
-**[▶ https://youtu.be/rxKkao6aBZg](https://youtu.be/rxKkao6aBZg)**
-
----
-
-## Lisensi
-
-Proyek ini dibuat untuk keperluan akademik — Praktikum UTS.
+- Satu backend dipakai dua app, jadi kalau ubah struktur response di `domain/` atau `usecase/`, cek dulu apa Kantongin ikut kepakai field itu juga.
+- OTP email dibedain "brand"-nya berdasarkan field `app` yang dikirim pas register (`kantongin` atau `ecommerce`), itu yang nentuin nama pengirim di email OTP-nya beda.
+- Nggak ada test otomatis buat sekarang, jadi tiap ubah endpoint mending dicek manual pakai Postman/Thunder Client dulu sebelum push.
